@@ -482,56 +482,6 @@ def create_compare_panel():
         global compare_results_area
         compare_results_area = ui.column().classes('w-full')
 
-# def create_graph_panel():
-#     with main_content:
-#         ui.label('File Dependency Graph').classes('text-2xl font-bold mb-4')
-#         if not repo_analysis_result:
-#             ui.label('Please analyze a repository first in the Input panel.').classes('text-orange-500 mb-4')
-#             return
-
-#         files = repo_analysis_result.get('repo_info', {}).get('name', 'repo')
-#         file_list = analyzer.current_repo.get('files', [])
-
-#         graph = nx.DiGraph()
-#         module_map = {Path(f.path).stem: f for f in file_list}
-
-#         for file in file_list:
-#             if not file.path.endswith('.py'):
-#                 continue  # 🔥 Skip non-Python files
-
-#             fname = Path(file.path).stem
-#             try:
-#                 tree = ast.parse(file.content)
-#                 for node in ast.walk(tree):
-#                     if isinstance(node, ast.Import):
-#                         for alias in node.names:
-#                             imp = alias.name.split('.')[0]
-#                             if imp in module_map:
-#                                 graph.add_edge(fname, imp)
-#                     elif isinstance(node, ast.ImportFrom):
-#                         if node.module:
-#                             imp = node.module.split('.')[0]
-#                             if imp in module_map:
-#                                 graph.add_edge(fname, imp)
-#             # except Exception as e:
-#             #     continue  
-#             except Exception as e:
-#                 print(f"AST parse failed for {file.path}: {e}")
-
-
-#         fig, ax = plt.subplots(figsize=(10, 6))
-#         pos = nx.spring_layout(graph, seed=42)
-#         nx.draw(graph, pos, with_labels=True, node_size=2000, node_color='lightblue', arrows=True, ax=ax)
-#         ax.set_title("Python File Dependency Graph", fontsize=14)
-
-#         buf = io.BytesIO()
-#         fig.savefig(buf, format='png')
-#         buf.seek(0)
-#         encoded = base64.b64encode(buf.read()).decode('utf-8')
-#         plt.close(fig)
-
-#         ui.image(f'data:image/png;base64,{encoded}').classes('w-full')
-
 def create_graph_panel():
     with main_content:
         ui.label('File Dependency Graph').classes('text-2xl font-bold mb-4')
@@ -607,7 +557,39 @@ def create_graph_panel():
 
         ui.image(f'data:image/png;base64,{encoded}').classes('w-full')
 
+def generate_model_comparison_chart(results):
+    models = [res.model for res in results if not res.error]
+    response_times = [res.response_time for res in results if not res.error]
+    token_counts = [res.token_count for res in results if not res.error]
 
+    fig, ax1 = plt.subplots(figsize=(10, 5))
+
+    ax2 = ax1.twinx()
+    width = 0.4
+    x = range(len(models))
+
+    ax1.bar([i - width/2 for i in x], response_times, width=width, label='Response Time (s)')
+    ax2.bar([i + width/2 for i in x], token_counts, width=width, label='Token Count', color='orange')
+
+    ax1.set_xlabel('Model')
+    ax1.set_ylabel('Response Time (s)')
+    ax2.set_ylabel('Token Count')
+
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(models, rotation=45, ha='right')
+    ax1.set_title('Model Comparison: Response Time and Token Count')
+    ax1.legend(loc='upper left')
+    ax2.legend(loc='upper right')
+
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    buf.seek(0)
+    encoded = base64.b64encode(buf.read()).decode('utf-8')
+    plt.close(fig)
+
+    return encoded
 
 async def compare_models(question: str, model_checkboxes):
     if not question:
@@ -639,6 +621,12 @@ async def compare_models(question: str, model_checkboxes):
                         ui.label(f'Estimated Tokens: {result.token_count}').classes('text-sm text-gray-600')
                         ui.label('Response:').classes('font-bold mt-2')
                         ui.label(result.response).classes('p-2 bg-gray-50 rounded')
+
+            # 🟢 Add chart after showing textual results
+            chart_base64 = generate_model_comparison_chart(results)
+            ui.label("Visual Summary").classes('text-xl font-bold mt-6 mb-2')
+            ui.image(f'data:image/png;base64,{chart_base64}').classes('w-full')
+
     except Exception as e:
         compare_results_area.clear()
         ui.label(f'Error comparing models: {str(e)}').classes('text-red-500')
